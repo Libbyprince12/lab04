@@ -52,24 +52,20 @@ The Welch Two Sample t-test showed a significant difference in the biomass of Co
 trout_clean <- and_vertebrates |>
   filter(species == "Cutthroat trout") |>
   drop_na(length_1_mm, weight_g)
+
 library(ggpubr)
 ggarrange(
   gghistogram(trout_clean$length_1_mm, title = "Length (snout-to-fork)"),
   gghistogram(trout_clean$weight_g, title = "Weight"),
   ncol = 2
 )
-
 s <- trout_clean |> slice_sample(n = 5000)
 shapiro.test(s$length_1_mm)
 shapiro.test(s$weight_g)
-
 trout_clean <- trout_clean |> 
   mutate(log_length = log(length_1_mm), log_weight = log(weight_g))
-
 cor.test(trout_clean$length_1_mm, trout_clean$weight_g, method = "spearman")
-
 cor.test(trout_clean$log_length, trout_clean$log_weight, method = "spearman")
-
 library(ggplot2)
 trout_clean |>
   ggscatter(x = 'log_length', y = 'log_weight', alpha = 0.35, add = "loess")
