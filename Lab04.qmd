@@ -1,0 +1,149 @@
+---
+title: "Lab04"
+author: "Libby Prince"
+date: "2025-03-11"
+format: html
+execute:
+  echo: true
+---
+
+Part 1:
+
+```{r}
+remotes::install_github("lter/lterdatasampler", force = TRUE)
+library(tidyverse)
+library(ggpubr)
+library(lterdatasampler)
+library(car)
+library(visdat)
+```
+
+**1.**
+
+```{r}
+coastal_salamander <- and_vertebrates %>%
+  filter(species == "Coastal giant salamander") %>%
+  drop_na(unittype, section)
+cont_table_salamander <- table(coastal_salamander$section, coastal_salamander$unittype)
+cont_table_salamander
+
+chisq_test_salamander <- chisq.test(cont_table_salamander)
+chisq_test_salamander
+
+```
+
+We reject the null hypothesis because the p-value is significantly lower than 0.05. This indicates a significant relationship between forest type (section) and channel unit type (unittype) for Coastal salamander abundance.
+
+**2.** Test the hypothesis that there is a significant difference in species biomass between clear cut and old growth forest types for the *Coastal Giant salamander*. (10 pts.)
+
+```{r}
+salamander_biomass <- and_vertebrates %>%
+  filter(species == "Coastal giant salamander", section %in% c("CC", "OG")) %>%
+  drop_na(weight_g)
+t_test_result <- t.test(weight_g ~ section, data = salamander_biomass)
+print(t_test_result)
+```
+
+The Welch Two Sample t-test showed a significant difference in the biomass of Coastal Giant Salamanders between Clear Cut and Old Growth forest types (t=4.93, df=6335.9, p \<0.001). The mean biomass was higher in Clear Cut forests (mean=9.81g) compared to Old Growth forests (mean=8.32g). The 95% confidence interval for the difference in means ranges from 0.90g-2.09g, indicating that the difference is statistically significant.
+
+**3.** Test the correlation between body length (snout to fork length) and body mass for *Cutthroat trout*. (Hint: run `?and_vertebrates` to find which length variable represents snout to fork length) (10 pts.)
+
+```{r}
+trout_clean <- and_vertebrates |>
+  filter(species == "Cutthroat trout") |>
+  drop_na(length_1_mm, weight_g)
+library(ggpubr)
+ggarrange(
+  gghistogram(trout_clean$length_1_mm, title = "Length (snout-to-fork)"),
+  gghistogram(trout_clean$weight_g, title = "Weight"),
+  ncol = 2
+)
+
+s <- trout_clean |> slice_sample(n = 5000)
+shapiro.test(s$length_1_mm)
+shapiro.test(s$weight_g)
+
+trout_clean <- trout_clean |> 
+  mutate(log_length = log(length_1_mm), log_weight = log(weight_g))
+
+cor.test(trout_clean$length_1_mm, trout_clean$weight_g, method = "spearman")
+
+cor.test(trout_clean$log_length, trout_clean$log_weight, method = "spearman")
+
+library(ggplot2)
+trout_clean |>
+  ggscatter(x = 'log_length', y = 'log_weight', alpha = 0.35, add = "loess")
+```
+
+A Spearman's rank correlation showed a strong positive correlation between log-transformed body length and log-transformed body weight in the Cutthroat trough (rho=0.992, p\<0.001), which indicates that as the body length increases, body weight also increases.
+
+Part 2:
+
+```{r}
+options(repos = c(CRAN = "https://cran.rstudio.com"))
+install.packages("car")
+install.packages("lterdatasampler")
+library(lterdatasampler)
+library(dplyr)
+```
+
+1.  **After** completing the ANOVA test (and post-hoc Tukey’s HSD) above to test for significant differences in crab size among 3 different sites: **1)** Create a boxplot showing the carapace width for each site where sites are *ordered by latitude* and **2)** report the findings of the statistical test as you would in a scientific paper. *Include both the code to create the boxplot and an image of the figure.* (10 pts.)
+
+```{r}
+library(dplyr)
+library(car)
+library(ggplot2)
+str(pie_crab)
+pie_sites <- pie_crab %>%
+  filter(site %in% c("GTM", "DB", "PIE"))
+pie_sites$site <- factor(pie_sites$site, levels = c("GTM", "DB", "PIE"))
+
+leveneTest(size ~ site, data = pie_sites)
+
+pie_anova <- aov(size ~ site, data = pie_sites)
+summary(pie_anova)
+
+TukeyHSD(pie_anova)
+
+ggplot(pie_sites, aes(x = site, y = size, fill = site)) +
+  geom_boxplot() +
+  geom_jitter(width = 0.2, size = 1, alpha = 0.5) +
+  labs(title = "Carapace Width by Site", x = "Site", y = "Carapace Width (mm)") +
+  theme_minimal()
+```
+
+For Levene's test, the p-value was 0.5802, indicating no significant variance difference between sites. For the ANOVA test, there is a significant difference in carapace width among sites (p\>0.001). In Tukey's HSD test, significant differences were found between all site pairs: DB vs GTM 3.2 mm different (p\>0.001), PIE vs GTM: 6.1 mm difference (p \< 0.001), and PIE vs. DB: 2.9 mm difference (p \< 0.001).
+
+2.  Conduct a simple linear regression for the effect of `water_temp_sd` (a measure reflecting annual variation in water temperature) on carapace width. Report your findings (include code *and* a sentence reporting the results) AND create a plot with a line of best fit. *Include both the code to create the plot and an image of the figure*. (10 pts).
+
+```{r}
+water_temp_lm <- lm(size ~ water_temp_sd, data = pie_crab)
+summary(water_temp_lm)
+ggplot(pie_crab, aes(x = water_temp_sd, y = size)) +
+  geom_point() +
+  geom_smooth(method = "lm", color = "blue", se = FALSE) +
+  labs(title = "Effect of Annual Temperature Variation on Carapace Width", 
+       x = "Annual Variation in Water Temperature (°C)", 
+       y = "Carapace Width (mm)") +
+  theme_minimal()
+```
+
+The linear regression shows that annual variation in water temperatures (water_temp_sd) does not significantly affect carparace width (size) (p=0.528).
+
+1.  Conduct a multiple linear regression for the effects of `latitude`, `air_temp_sd`, and `water_temp_sd` on carapace width. **First** check for correlations among the three predictor variables (and report the correlation table) and **second** report your findings from the multiple linear regression (code *and* a sentence reporting the results). (10 pts.)
+
+```{r}
+correlation_table <- pie_crab %>%
+  dplyr::select(latitude, air_temp_sd, water_temp_sd) %>%
+  cor()
+correlation_table
+pie_mlr <- lm(size ~ latitude + air_temp_sd + water_temp_sd, data = pie_crab)
+summary(pie_mlr)
+
+```
+
+There is a positive correlation between latitude and air_temp_sd (r=0.79), suggesting that those predictors may be related. The correlation between latitude and water_temp_sd is very low (r=0.04), as is the correlation between air_temp_sd and water_temp_sd (r=0.41)
+
+format:\
+  html:\
+    self-contained: true
